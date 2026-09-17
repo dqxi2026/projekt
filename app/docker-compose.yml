@@ -9,18 +9,36 @@ services:
       POSTGRES_DB: postgres
     ports:
       - "5432:5432"
+    # KLUCZOWE: Wolumen dla bazy danych, żeby dane nie znikały po restarcie
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # KLUCZOWE: Sprawdzanie, czy baza faktycznie wystartowała
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   web:
     build: .
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"
+    # KLUCZOWE: Mapowanie kodu na żywo (zmiany w plikach od razu działają w kontenerze)
+    volumes:
+      - .:/app
+    # KLUCZOWE: Czekaj, aż baza będzie w pełni gotowa (zdrowa)
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       - DB_HOST=db
       - DB_NAME=postgres
       - DB_USER=postgres
       - DB_PASSWORD=admin123
 
-      
+# Definicja wolumenu dla bazy
+volumes:
+  postgres_data:
+
+  

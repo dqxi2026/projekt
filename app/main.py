@@ -13,6 +13,9 @@ from pydantic import BaseModel
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 
+# Import zadania asynchronicznego z workera Celery
+from app.celery_worker import process_file_task
+
 
 # ==========================================
 # CONFIGURATION & SECURITY SETUP
@@ -34,7 +37,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-app = FastAPI()
+app = FastAPI(title="FileShare API z PostgreSQL i Celery")
 
 
 # ==========================================
@@ -222,10 +225,15 @@ def upload_file(
 
             conn.commit()
 
+    # Zlecenie zadania w tle do zewnętrznego workera Celery przez Redisa
+    task = process_file_task.delay(file.filename, current_user["username"])
+
     return {
         "filename": file.filename,
         "download_link": f"/download/{file_token}",
-        "access_type": access_type
+        "access_type": access_type,
+        "task_id": task.id,
+        "message": "File uploaded successfully and task sent to Celery worker!"
     }
 
 
@@ -250,7 +258,7 @@ def download_file(file_token: str, request: Request, token: Optional[str] = None
             jwt_token = auth_header.split(" ")[1]
             try:
                 payload = jwt.decode(jwt_token, SECRET_KEY, algorithms=[ALGORITHM])
-                username = payload.get("sub")
+                username: str = payload.get("sub")
                 if username:
                     with get_connection() as conn:
                         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -264,7 +272,7 @@ def download_file(file_token: str, request: Request, token: Optional[str] = None
 
         if current_user["id"] != file_record["owner_id"]:
             with get_connection() as conn:
-                with conn.cursor() as cursor:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                     cursor.execute(
                         "SELECT 1 FROM file_permissions WHERE file_id = %s AND user_id = %s;",
                         (file_record["id"], current_user["id"])
