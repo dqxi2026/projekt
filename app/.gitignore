@@ -1,0 +1,16 @@
+# Środowisko wirtualne
+venv/
+.venv/
+env/
+
+# Pliki konfiguracyjne ze zmiennymi tajnymi / hasłami
+.env
+
+# Pliki tymczasowe Pythona
+__pycache__/
+*.pyc
+*.pyo
+
+# Pliki bazy danych / lokalne uploady (opcjonalnie)
+*.log
+
